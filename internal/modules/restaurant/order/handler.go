@@ -52,6 +52,25 @@ func (h *Handler) GetByRestaurant(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
+func (h *Handler) Confirm(c *gin.Context) {
+	token := c.Query("token")
+	if token == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing token"})
+		return
+	}
+
+	resp, err := h.svc.ConfirmOrder(c.Request.Context(), token)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "invalid or expired token"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		return
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
 func (h *Handler) UpdateStatus(c *gin.Context) {
 	var req UpdateStatusReq
 	if err := c.ShouldBindJSON(&req); err != nil {

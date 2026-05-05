@@ -5,13 +5,22 @@ import "time"
 type OrderStatus string
 
 const (
-	StatusPending   OrderStatus = "pending"
-	StatusConfirmed OrderStatus = "confirmed"
-	StatusPreparing OrderStatus = "preparing"
-	StatusReady     OrderStatus = "ready"
-	StatusDelivered OrderStatus = "delivered"
-	StatusCancelled OrderStatus = "cancelled"
+	StatusAwaitingConfirmation OrderStatus = "awaiting_confirmation"
+	StatusPending              OrderStatus = "pending"
+	StatusConfirmed            OrderStatus = "confirmed"
+	StatusPreparing            OrderStatus = "preparing"
+	StatusReady                OrderStatus = "ready"
+	StatusDelivered            OrderStatus = "delivered"
+	StatusCancelled            OrderStatus = "cancelled"
 )
+
+type OrderConfirmation struct {
+	ID        string
+	OrderID   string
+	Token     string
+	ExpiresAt time.Time
+	CreatedAt time.Time
+}
 
 type Order struct {
 	ID           string
@@ -19,6 +28,7 @@ type Order struct {
 	TableID      string
 	Status       OrderStatus
 	Notes        string
+	GuestEmail   string
 	Items        []OrderItem
 	CreatedAt    time.Time
 	UpdatedAt    time.Time

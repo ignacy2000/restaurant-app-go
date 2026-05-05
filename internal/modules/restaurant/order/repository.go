@@ -21,10 +21,10 @@ func (r *Repository) Create(ctx context.Context, o *Order) error {
 	}
 
 	query := `
-		INSERT INTO orders (restaurant_id, table_id, status, notes)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO orders (restaurant_id, table_id, status, notes, guest_email)
+		VALUES ($1, $2, $3, $4, $5)
 		RETURNING id, created_at, updated_at`
-	err = tx.QueryRowContext(ctx, query, o.RestaurantID, o.TableID, o.Status, o.Notes).
+	err = tx.QueryRowContext(ctx, query, o.RestaurantID, o.TableID, o.Status, o.Notes, o.GuestEmail).
 		Scan(&o.ID, &o.CreatedAt, &o.UpdatedAt)
 	if err != nil {
 		_ = tx.Rollback()
@@ -128,6 +128,27 @@ func (r *Repository) UpdateStatus(ctx context.Context, id string, status OrderSt
 		return sql.ErrNoRows
 	}
 	return nil
+}
+
+func (r *Repository) CreateConfirmation(ctx context.Context, c *OrderConfirmation) error {
+	query := `INSERT INTO order_confirmations (order_id, token, expires_at) VALUES ($1, $2, $3) RETURNING id, created_at`
+	return r.db.QueryRowContext(ctx, query, c.OrderID, c.Token, c.ExpiresAt).Scan(&c.ID, &c.CreatedAt)
+}
+
+func (r *Repository) FindConfirmationByToken(ctx context.Context, token string) (*OrderConfirmation, error) {
+	c := &OrderConfirmation{}
+	err := r.db.QueryRowContext(ctx,
+		`SELECT id, order_id, token, expires_at, created_at FROM order_confirmations WHERE token = $1`, token).
+		Scan(&c.ID, &c.OrderID, &c.Token, &c.ExpiresAt, &c.CreatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	return c, err
+}
+
+func (r *Repository) DeleteConfirmationByToken(ctx context.Context, token string) error {
+	_, err := r.db.ExecContext(ctx, `DELETE FROM order_confirmations WHERE token = $1`, token)
+	return err
 }
 
 func (r *Repository) loadItems(ctx context.Context, o *Order) error {

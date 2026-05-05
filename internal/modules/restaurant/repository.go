@@ -37,6 +37,19 @@ func (r *Repository) FindByID(ctx context.Context, id string) (*Restaurant, erro
 	return rest, nil
 }
 
+// FindName returns the name of the restaurant, or "" if not found.
+func (r *Repository) FindName(ctx context.Context, id string) (string, error) {
+	var name string
+	err := r.db.QueryRowContext(ctx, `SELECT name FROM restaurants WHERE id = $1`, id).Scan(&name)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("find name: %w", err)
+	}
+	return name, nil
+}
+
 // FindOwnerID returns the user_id of the restaurant owner, or "" if not found.
 func (r *Repository) FindOwnerID(ctx context.Context, id string) (string, error) {
 	var ownerID string

@@ -75,7 +75,7 @@ func main() {
 	api := r.Group("/api")
 	userModule.Mount(api, authMw, userHandler)
 	authModule.Mount(api, authMw, authHandler)
-	restaurantModule.MountAll(api, authMw, db, hub, cfg.JWTSecret)
+	restaurantModule.MountAll(api, authMw, db, hub, cfg.JWTSecret, mail, cfg.FrontendURL)
 
 	log.Info("server starting", "port", cfg.Port)
 	if err := http.ListenAndServe(":"+cfg.Port, r); err != nil {

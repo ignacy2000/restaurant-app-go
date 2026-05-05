@@ -9,12 +9,13 @@ import (
 	orderModule "table-service.pl/internal/modules/restaurant/order"
 	tableModule "table-service.pl/internal/modules/restaurant/table"
 	internalWS "table-service.pl/internal/ws"
+	"table-service.pl/pkg/mailer"
 	"table-service.pl/pkg/ws"
 )
 
 // MountAll wires and registers all restaurant sub-modules
 // (restaurant, menu, table, order, call, websocket) under the given api group.
-func MountAll(api *gin.RouterGroup, authMw gin.HandlerFunc, db *sql.DB, hub *ws.Hub, jwtSecret string) {
+func MountAll(api *gin.RouterGroup, authMw gin.HandlerFunc, db *sql.DB, hub *ws.Hub, jwtSecret string, mail *mailer.Mailer, frontendURL string) {
 	restaurantRepo := NewRepository(db)
 	menuRepo := menuModule.NewRepository(db)
 	tableRepo := tableModule.NewRepository(db)
@@ -24,7 +25,7 @@ func MountAll(api *gin.RouterGroup, authMw gin.HandlerFunc, db *sql.DB, hub *ws.
 	restaurantSvc := NewService(restaurantRepo)
 	menuSvc := menuModule.NewService(menuRepo, restaurantRepo)
 	tableSvc := tableModule.NewService(tableRepo, restaurantRepo)
-	orderSvc := orderModule.NewService(orderRepo, tableRepo, hub)
+	orderSvc := orderModule.NewService(orderRepo, tableRepo, hub, restaurantRepo, mail, frontendURL)
 	callSvc := callModule.NewService(callRepo, tableRepo, hub)
 
 	Mount(api, authMw, NewHandler(restaurantSvc))
