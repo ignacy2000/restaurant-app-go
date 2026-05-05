@@ -34,6 +34,15 @@ func (h *Handler) Create(c *gin.Context) {
 	c.JSON(http.StatusCreated, resp)
 }
 
+func (h *Handler) GetByTable(c *gin.Context) {
+	resp, err := h.svc.GetByTable(c.Request.Context(), c.Param("id"), c.Param("tableId"))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		return
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
 func (h *Handler) GetByRestaurant(c *gin.Context) {
 	resp, err := h.svc.GetByRestaurant(c.Request.Context(), c.Param("id"))
 	if err != nil {

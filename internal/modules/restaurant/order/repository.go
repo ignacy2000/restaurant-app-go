@@ -72,6 +72,35 @@ func (r *Repository) FindByRestaurantID(ctx context.Context, restaurantID string
 	return orders, nil
 }
 
+func (r *Repository) FindByTableID(ctx context.Context, restaurantID, tableID string) ([]Order, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id, restaurant_id, table_id, status, notes, created_at, updated_at FROM orders WHERE restaurant_id = $1 AND table_id = $2 ORDER BY created_at DESC`,
+		restaurantID, tableID)
+	if err != nil {
+		return nil, fmt.Errorf("find orders by table: %w", err)
+	}
+	defer rows.Close()
+
+	var orders []Order
+	for rows.Next() {
+		var o Order
+		if err := rows.Scan(&o.ID, &o.RestaurantID, &o.TableID, &o.Status, &o.Notes, &o.CreatedAt, &o.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scan order: %w", err)
+		}
+		orders = append(orders, o)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	for i := range orders {
+		if err := r.loadItems(ctx, &orders[i]); err != nil {
+			return nil, err
+		}
+	}
+	return orders, nil
+}
+
 func (r *Repository) FindByID(ctx context.Context, id string) (*Order, error) {
 	o := &Order{}
 	err := r.db.QueryRowContext(ctx,

@@ -68,6 +68,18 @@ func (s *Service) GetByRestaurant(ctx context.Context, restaurantID string) ([]R
 	return responses, nil
 }
 
+func (s *Service) GetByTable(ctx context.Context, restaurantID, tableID string) ([]Response, error) {
+	orders, err := s.repo.FindByTableID(ctx, restaurantID, tableID)
+	if err != nil {
+		return nil, err
+	}
+	responses := make([]Response, len(orders))
+	for i, o := range orders {
+		responses[i] = *toResponse(&o)
+	}
+	return responses, nil
+}
+
 func (s *Service) UpdateStatus(ctx context.Context, orderID string, req UpdateStatusReq) error {
 	o, err := s.repo.FindByID(ctx, orderID)
 	if err != nil {

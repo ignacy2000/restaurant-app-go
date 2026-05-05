@@ -1,5 +1,3 @@
-//go:build integration
-
 package order_test
 
 import (
