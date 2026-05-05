@@ -67,6 +67,39 @@ func (h *Handler) Refresh(c *gin.Context) {
 	c.JSON(http.StatusOK, tokens)
 }
 
+// --- password reset ---
+
+func (h *Handler) ForgotPassword(c *gin.Context) {
+	var req struct {
+		Email string `json:"email" binding:"required,email"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	_ = h.svc.ForgotPassword(c.Request.Context(), req.Email)
+	c.JSON(http.StatusOK, gin.H{"message": "if the email exists, a reset link was sent"})
+}
+
+func (h *Handler) ResetPassword(c *gin.Context) {
+	var req struct {
+		Token    string `json:"token"    binding:"required"`
+		Password string `json:"password" binding:"required,min=8"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.svc.ResetPassword(c.Request.Context(), req.Token, req.Password); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid or expired token"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "password updated"})
+}
+
 // --- origin management ---
 
 func (h *Handler) ListOrigins(c *gin.Context) {

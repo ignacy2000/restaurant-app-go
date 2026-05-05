@@ -3,79 +3,71 @@ package middleware
 import (
 	"context"
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 )
 
-// OriginStore trzyma dozwolone originy w pamięci i odświeża je z DB co TTL.
-// Użyj NewOriginStore i przekaż do DynamicCORS.
+// corsOriginsKey is the Redis Set key that stores allowed origins.
+// A sentinel member marks the set as populated (handles empty-set case).
+const corsOriginsKey = "cors:allowed_origins"
+const corsLoadedSentinel = "\x00loaded\x00"
+
 type OriginStore struct {
 	load   func(ctx context.Context) ([]string, error)
 	static []string
 	ttl    time.Duration
-
-	mu       sync.RWMutex
-	cache    map[string]struct{}
-	loadedAt time.Time
+	rdb    *redis.Client
 }
 
-func NewOriginStore(ttl time.Duration, load func(context.Context) ([]string, error), static ...string) *OriginStore {
-	return &OriginStore{
-		load:   load,
-		static: static,
-		ttl:    ttl,
-		cache:  make(map[string]struct{}),
-	}
+func NewOriginStore(ttl time.Duration, load func(context.Context) ([]string, error), rdb *redis.Client, static ...string) *OriginStore {
+	return &OriginStore{load: load, static: static, ttl: ttl, rdb: rdb}
 }
 
-func (s *OriginStore) allowed(origin string) bool {
-	s.mu.RLock()
-	fresh := time.Since(s.loadedAt) < s.ttl
-	_, ok := s.cache[origin]
-	s.mu.RUnlock()
+func (s *OriginStore) allowed(ctx context.Context, origin string) bool {
+	pipe := s.rdb.Pipeline()
+	isLoaded := pipe.SIsMember(ctx, corsOriginsKey, corsLoadedSentinel)
+	isMember := pipe.SIsMember(ctx, corsOriginsKey, origin)
+	pipe.Exec(ctx) //nolint:errcheck
 
-	if fresh {
-		return ok
+	if loaded, _ := isLoaded.Result(); !loaded {
+		if err := s.refresh(ctx); err != nil {
+			return false
+		}
+		ok, err := s.rdb.SIsMember(ctx, corsOriginsKey, origin).Result()
+		return err == nil && ok
 	}
-	s.refresh()
 
-	s.mu.RLock()
-	_, ok = s.cache[origin]
-	s.mu.RUnlock()
+	ok, _ := isMember.Result()
 	return ok
 }
 
-func (s *OriginStore) refresh() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if time.Since(s.loadedAt) < s.ttl {
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
+func (s *OriginStore) refresh(ctx context.Context) error {
 	dbOrigins, err := s.load(ctx)
 	if err != nil {
-		return
+		return err
 	}
 
-	next := make(map[string]struct{}, len(dbOrigins)+len(s.static))
+	members := make([]interface{}, 0, len(dbOrigins)+len(s.static)+1)
+	members = append(members, corsLoadedSentinel)
 	for _, o := range dbOrigins {
-		next[o] = struct{}{}
+		members = append(members, o)
 	}
 	for _, o := range s.static {
-		next[o] = struct{}{}
+		members = append(members, o)
 	}
-	s.cache = next
-	s.loadedAt = time.Now()
+
+	pipe := s.rdb.TxPipeline()
+	pipe.Del(ctx, corsOriginsKey)
+	pipe.SAdd(ctx, corsOriginsKey, members...)
+	pipe.Expire(ctx, corsOriginsKey, s.ttl)
+	_, err = pipe.Exec(ctx)
+	return err
 }
 
 // DynamicCORS zastępuje middleware.CORS() — sprawdza Origin requestu
-// przeciwko liście z bazy danych (odświeżanej co TTL) i domenie z .env.
+// przeciwko liście z bazy danych (cache w Redis, odświeżany co TTL) i domenie z .env.
 // Requesty bez nagłówka Origin (np. curl, server-to-server) są przepuszczane.
 func DynamicCORS(store *OriginStore) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -86,7 +78,7 @@ func DynamicCORS(store *OriginStore) gin.HandlerFunc {
 			return
 		}
 
-		if !store.allowed(origin) {
+		if !store.allowed(c.Request.Context(), origin) {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "origin not allowed"})
 			return
 		}

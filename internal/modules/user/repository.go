@@ -50,3 +50,11 @@ func (r *Repository) FindByID(ctx context.Context, id string) (*User, error) {
 	}
 	return u, nil
 }
+
+func (r *Repository) UpdatePassword(ctx context.Context, userID, passwordHash string) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE users SET password_hash = $1 WHERE id = $2`,
+		passwordHash, userID,
+	)
+	return err
+}

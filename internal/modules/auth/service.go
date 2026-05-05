@@ -8,8 +8,10 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/hibiken/asynq"
 	"golang.org/x/crypto/bcrypt"
 	"table-service.pl/internal/modules/user"
+	"table-service.pl/pkg/worker"
 )
 
 type LoginReq struct {
@@ -18,13 +20,15 @@ type LoginReq struct {
 }
 
 type Service struct {
-	repo      *Repository
-	userRepo  *user.Repository
-	jwtSecret string
+	repo        *Repository
+	userRepo    *user.Repository
+	jwtSecret   string
+	asynqClient *asynq.Client
+	frontendURL string
 }
 
-func NewService(repo *Repository, userRepo *user.Repository, jwtSecret string) *Service {
-	return &Service{repo: repo, userRepo: userRepo, jwtSecret: jwtSecret}
+func NewService(repo *Repository, userRepo *user.Repository, jwtSecret string, asynqClient *asynq.Client, frontendURL string) *Service {
+	return &Service{repo: repo, userRepo: userRepo, jwtSecret: jwtSecret, asynqClient: asynqClient, frontendURL: frontendURL}
 }
 
 func (s *Service) Login(ctx context.Context, req LoginReq) (*TokenPair, error) {
@@ -132,4 +136,59 @@ func (s *Service) AddOrigin(ctx context.Context, origin string) (*AllowedOrigin,
 
 func (s *Service) RemoveOrigin(ctx context.Context, id string) error {
 	return s.repo.RemoveOrigin(ctx, id)
+}
+
+func (s *Service) ForgotPassword(ctx context.Context, email string) error {
+	u, err := s.userRepo.FindByEmail(ctx, email)
+	if err != nil {
+		return fmt.Errorf("find user: %w", err)
+	}
+	if u == nil {
+		return nil
+	}
+
+	token, err := newRefreshToken()
+	if err != nil {
+		return err
+	}
+
+	rt := &PasswordResetToken{
+		UserID:    u.ID,
+		Token:     token,
+		ExpiresAt: time.Now().Add(time.Hour),
+	}
+	if err := s.repo.CreateResetToken(ctx, rt); err != nil {
+		return fmt.Errorf("create reset token: %w", err)
+	}
+
+	resetURL := s.frontendURL + "/reset-password?token=" + token
+	task, err := worker.NewPasswordResetTask(email, resetURL)
+	if err != nil {
+		return fmt.Errorf("create task: %w", err)
+	}
+	if _, err := s.asynqClient.EnqueueContext(ctx, task); err != nil {
+		return fmt.Errorf("enqueue task: %w", err)
+	}
+	return nil
+}
+
+func (s *Service) ResetPassword(ctx context.Context, token, newPassword string) error {
+	rt, err := s.repo.FindResetToken(ctx, token)
+	if err != nil {
+		return fmt.Errorf("find reset token: %w", err)
+	}
+	if rt == nil || rt.ExpiresAt.Before(time.Now()) {
+		return fmt.Errorf("invalid or expired token")
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("hash password: %w", err)
+	}
+
+	if err := s.userRepo.UpdatePassword(ctx, rt.UserID, string(hash)); err != nil {
+		return fmt.Errorf("update password: %w", err)
+	}
+
+	return s.repo.DeleteResetToken(ctx, token)
 }

@@ -10,6 +10,14 @@ type Session struct {
 	CreatedAt    time.Time
 }
 
+type PasswordResetToken struct {
+	ID        string
+	UserID    string
+	Token     string
+	ExpiresAt time.Time
+	CreatedAt time.Time
+}
+
 type TokenPair struct {
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
