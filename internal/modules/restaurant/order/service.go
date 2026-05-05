@@ -140,6 +140,18 @@ func (s *Service) ConfirmOrder(ctx context.Context, token string) (*ConfirmRespo
 	}, nil
 }
 
+func (s *Service) GetActiveByRestaurant(ctx context.Context, restaurantID string) ([]Response, error) {
+	orders, err := s.repo.FindActiveByRestaurantID(ctx, restaurantID)
+	if err != nil {
+		return nil, err
+	}
+	responses := make([]Response, len(orders))
+	for i, o := range orders {
+		responses[i] = *toResponse(&o)
+	}
+	return responses, nil
+}
+
 func (s *Service) GetByRestaurant(ctx context.Context, restaurantID string) ([]Response, error) {
 	orders, err := s.repo.FindByRestaurantID(ctx, restaurantID)
 	if err != nil {

@@ -9,5 +9,6 @@ func Mount(r *gin.RouterGroup, auth gin.HandlerFunc, h *Handler) {
 
 	protected := r.Group("", auth)
 	protected.GET("/restaurants/:id/orders", h.GetByRestaurant)
+	protected.GET("/restaurants/:id/orders/active", h.GetActiveByRestaurant)
 	protected.PATCH("/restaurants/:id/orders/:orderId/status", h.UpdateStatus)
 }

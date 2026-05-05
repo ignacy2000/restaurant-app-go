@@ -48,6 +48,18 @@ func (s *Service) Create(ctx context.Context, restaurantID, tableID string) (*Re
 	return resp, nil
 }
 
+func (s *Service) GetActiveByRestaurant(ctx context.Context, restaurantID string) ([]Response, error) {
+	calls, err := s.repo.FindActiveByRestaurantID(ctx, restaurantID)
+	if err != nil {
+		return nil, err
+	}
+	responses := make([]Response, len(calls))
+	for i, c := range calls {
+		responses[i] = *toResponse(&c)
+	}
+	return responses, nil
+}
+
 func (s *Service) GetByRestaurant(ctx context.Context, restaurantID string) ([]Response, error) {
 	calls, err := s.repo.FindByRestaurantID(ctx, restaurantID)
 	if err != nil {
